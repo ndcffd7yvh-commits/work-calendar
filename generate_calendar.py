@@ -2,11 +2,30 @@ import os
 import io
 import uuid
 import pandas as pd
-from datetime import date, timedelta
+from datetime import timedelta
 import requests
 
 DROPBOX_TOKEN = os.environ["DROPBOX_TOKEN"]
-DROPBOX_PATH = "/Planning/planning_2026.xlsx"
+DROPBOX_FILENAME = "planning 2026.xlsx"
+
+
+def find_file(token, filename):
+    resp = requests.post(
+        "https://api.dropboxapi.com/2/files/search_v2",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json={"query": filename},
+    )
+    resp.raise_for_status()
+    matches = resp.json().get("matches", [])
+    for m in matches:
+        path = m["metadata"]["metadata"].get("path_display", "")
+        if path.lower().endswith(filename.lower()):
+            print(f"Found file at: {path}")
+            return path
+    raise FileNotFoundError(f"Could not find '{filename}' on Dropbox. Matches: {matches}")
 
 
 def download_from_dropbox(token, path):
@@ -23,7 +42,6 @@ def download_from_dropbox(token, path):
 
 def extract_abdel_events(file_bytes):
     df = pd.read_excel(file_bytes, sheet_name="Planning", header=None)
-
     abdel_data = df.iloc[3:][[4, 7]].copy()
     abdel_data.columns = ["date", "event"]
     abdel_data = abdel_data.dropna(subset=["date"])
@@ -82,8 +100,11 @@ def build_ics(events):
 
 
 def main():
+    print("Locating Excel file on Dropbox...")
+    path = find_file(DROPBOX_TOKEN, DROPBOX_FILENAME)
+
     print("Downloading Excel from Dropbox...")
-    file_bytes = download_from_dropbox(DROPBOX_TOKEN, DROPBOX_PATH)
+    file_bytes = download_from_dropbox(DROPBOX_TOKEN, path)
 
     print("Extracting Abdel's events...")
     rows = extract_abdel_events(file_bytes)
