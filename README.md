@@ -1,6 +1,6 @@
-# Abdel Calendar Sync
+# Calendar Sync
 
-Automatically syncs Abdel's planning from Dropbox to an `.ics` file that your iPhone can subscribe to.
+Automatically syncs planning from Dropbox to an `.ics` file that your iPhone can subscribe to.
 
 ## How it works
 
