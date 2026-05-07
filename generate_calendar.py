@@ -5,8 +5,22 @@ import pandas as pd
 from datetime import timedelta
 import requests
 
-DROPBOX_TOKEN = os.environ["DROPBOX_TOKEN"]
+DROPBOX_REFRESH_TOKEN = os.environ["DROPBOX_REFRESH_TOKEN"]
+DROPBOX_APP_KEY = os.environ["DROPBOX_APP_KEY"]
+DROPBOX_APP_SECRET = os.environ["DROPBOX_APP_SECRET"]
 DROPBOX_FILENAME = "planning 2026.xlsx"
+
+def get_access_token(refresh_token, app_key, app_secret):
+    resp = requests.post(
+        "https://api.dropbox.com/oauth2/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
+        auth=(app_key, app_secret),
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
 def find_file(token, filename):
@@ -100,8 +114,11 @@ def build_ics(events):
 
 
 def main():
+    print("Getting Dropbox access token...")
+    token = get_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)
+
     print("Locating Excel file on Dropbox...")
-    path = find_file(DROPBOX_TOKEN, DROPBOX_FILENAME)
+    path = find_file(token, DROPBOX_FILENAME)
 
     print("Downloading Excel from Dropbox...")
     file_bytes = download_from_dropbox(DROPBOX_TOKEN, path)
