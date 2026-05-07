@@ -121,7 +121,7 @@ def main():
     path = find_file(token, DROPBOX_FILENAME)
 
     print("Downloading Excel from Dropbox...")
-    file_bytes = download_from_dropbox(DROPBOX_TOKEN, path)
+    file_bytes = download_from_dropbox(token, path)
 
     print("Extracting Abdel's events...")
     rows = extract_abdel_events(file_bytes)
@@ -135,7 +135,6 @@ def main():
     os.makedirs("output", exist_ok=True)
     with open("output/abdel.ics", "w", encoding="utf-8") as f:
         f.write(ics)
-
     print("Done! output/abdel.ics generated.")
 
 
