@@ -2,7 +2,7 @@ name: Generate Abdel Calendar
 
 on:
   schedule:
-    - cron: '0 6,8,10,12,14,16 * * 1-5'  # every 2 hours, 8-18 Brussels time, weekdays only
+    - cron: '*/15 6-16 * * 1-5'  # every 15 min, 8-18 Brussels time, weekdays
   workflow_dispatch:       # also allows manual trigger from GitHub UI
 
 permissions:
