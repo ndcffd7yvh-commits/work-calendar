@@ -2,7 +2,7 @@ name: Generate Abdel Calendar
 
 on:
   schedule:
-    - cron: '*/15 6-16 * * 1-5'  # every 15 min, 8-18 Brussels time, weekdays
+    - cron: '*/15 6-16 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: abdel-calendar
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   generate:
@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,14 +42,41 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add output/abdel_2026_2027.ics
+          git add output/abdel.ics
 
-          git diff --cached --quiet || git commit -m "Update Abdel calendar $(date -u +%Y-%m-%d)"
+          if git diff --cached --quiet; then
+            echo "No changes to calendar."
+            exit 0
+          fi
+
+          git commit -m "Update Abdel calendar $(date -u +%Y-%m-%d)"
 
           for i in 1 2 3 4 5; do
-            git push && break
-            echo "Push rejected, pulling latest and retrying ($i)..."
+            echo "Push attempt $i..."
+
+            if git push origin HEAD:main; then
+              echo "Push successful."
+              exit 0
+            fi
+
+            echo "Push rejected. Resetting to latest main and regenerating..."
+
             git fetch origin main
-            git rebase origin/main
+            git reset --hard origin/main
+
+            python generate_calendar.py
+
+            git add output/abdel.ics
+
+            if git diff --cached --quiet; then
+              echo "Calendar is already up to date."
+              exit 0
+            fi
+
+            git commit -m "Update Abdel calendar $(date -u +%Y-%m-%d)"
+
             sleep $((RANDOM % 5 + 1))
           done
+
+          echo "Failed to push after 5 attempts."
+          exit 1
