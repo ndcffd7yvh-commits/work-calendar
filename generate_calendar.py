@@ -8,7 +8,12 @@ import requests
 DROPBOX_REFRESH_TOKEN = os.environ["DROPBOX_REFRESH_TOKEN"]
 DROPBOX_APP_KEY = os.environ["DROPBOX_APP_KEY"]
 DROPBOX_APP_SECRET = os.environ["DROPBOX_APP_SECRET"]
-DROPBOX_FILENAME = "planning 2026.xlsx"
+
+DROPBOX_FILENAMES = [
+    "planning 2026.xlsx",
+    "planning 2027.xlsx",
+]
+
 
 def get_access_token(refresh_token, app_key, app_secret):
     resp = requests.post(
@@ -33,13 +38,19 @@ def find_file(token, filename):
         json={"query": filename},
     )
     resp.raise_for_status()
+
     matches = resp.json().get("matches", [])
+
     for m in matches:
         path = m["metadata"]["metadata"].get("path_display", "")
+
         if path.lower().endswith(filename.lower()):
             print(f"Found file at: {path}")
             return path
-    raise FileNotFoundError(f"Could not find '{filename}' on Dropbox. Matches: {matches}")
+
+    raise FileNotFoundError(
+        f"Could not find '{filename}' on Dropbox. Matches: {matches}"
+    )
 
 
 def download_from_dropbox(token, path):
@@ -51,38 +62,67 @@ def download_from_dropbox(token, path):
         },
     )
     resp.raise_for_status()
+
     return io.BytesIO(resp.content)
 
 
 def extract_abdel_events(file_bytes):
-    df = pd.read_excel(file_bytes, sheet_name="Planning", header=None)
+    df = pd.read_excel(
+        file_bytes,
+        sheet_name="Planning",
+        header=None
+    )
+
     abdel_data = df.iloc[3:][[4, 7]].copy()
+
     abdel_data.columns = ["date", "event"]
+
     abdel_data = abdel_data.dropna(subset=["date"])
     abdel_data = abdel_data[abdel_data["event"].notna()]
     abdel_data = abdel_data[abdel_data["event"] != "Abdel"]
-    abdel_data["event"] = abdel_data["event"].astype(str).str.strip()
-    abdel_data["date"] = pd.to_datetime(abdel_data["date"]).dt.date
+
+    abdel_data["event"] = (
+        abdel_data["event"]
+        .astype(str)
+        .str.strip()
+    )
+
+    abdel_data["date"] = pd.to_datetime(
+        abdel_data["date"]
+    ).dt.date
+
     return abdel_data.sort_values("date").to_dict("records")
 
 
 def group_events(rows):
     events = []
+
     i = 0
+
     while i < len(rows):
         start = rows[i]["date"]
         name = rows[i]["event"]
         end = start
+
         j = i + 1
+
         while j < len(rows):
             gap = (rows[j]["date"] - end).days
+
             if rows[j]["event"] == name and gap <= 3:
                 end = rows[j]["date"]
                 j += 1
             else:
                 break
-        events.append({"summary": name, "start": start, "end": end})
+
+        events.append({
+            "summary": name,
+            "start": start,
+            "end": end
+        })
+
         i = j
+
     return events
 
 
@@ -90,17 +130,21 @@ def build_ics(events):
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//Abdel Planning 2026//EN",
+        "PRODID:-//Abdel Planning 2026-2027//EN",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
-        "X-WR-CALNAME:Abdel Planning 2026",
+        "X-WR-CALNAME:Abdel Planning 2026-2027",
         "X-WR-TIMEZONE:Europe/Brussels",
         "REFRESH-INTERVAL;VALUE=DURATION:PT12H",
         "X-PUBLISHED-TTL:PT12H",
     ]
+
     for ev in events:
         dtstart = ev["start"].strftime("%Y%m%d")
-        dtend = (ev["end"] + timedelta(days=1)).strftime("%Y%m%d")
+        dtend = (
+            ev["end"] + timedelta(days=1)
+        ).strftime("%Y%m%d")
+
         lines += [
             "BEGIN:VEVENT",
             f"UID:{uuid.uuid4()}",
@@ -109,33 +153,66 @@ def build_ics(events):
             f"SUMMARY:{ev['summary']}",
             "END:VEVENT",
         ]
+
     lines.append("END:VCALENDAR")
+
     return "\r\n".join(lines)
 
 
 def main():
     print("Getting Dropbox access token...")
-    token = get_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)
 
-    print("Locating Excel file on Dropbox...")
-    path = find_file(token, DROPBOX_FILENAME)
+    token = get_access_token(
+        DROPBOX_REFRESH_TOKEN,
+        DROPBOX_APP_KEY,
+        DROPBOX_APP_SECRET
+    )
 
-    print("Downloading Excel from Dropbox...")
-    file_bytes = download_from_dropbox(token, path)
+    all_rows = []
 
-    print("Extracting Abdel's events...")
-    rows = extract_abdel_events(file_bytes)
+    for filename in DROPBOX_FILENAMES:
+        print(f"\nLocating {filename} on Dropbox...")
 
-    print("Grouping consecutive events...")
-    events = group_events(rows)
+        path = find_file(token, filename)
+
+        print(f"Downloading {filename}...")
+
+        file_bytes = download_from_dropbox(
+            token,
+            path
+        )
+
+        print(f"Extracting Abdel's events from {filename}...")
+
+        rows = extract_abdel_events(file_bytes)
+
+        print(f"Found {len(rows)} rows.")
+
+        all_rows.extend(rows)
+
+    # Make sure everything is sorted chronologically
+    all_rows.sort(key=lambda x: x["date"])
+
+    print("\nGrouping consecutive events...")
+
+    events = group_events(all_rows)
 
     print(f"Building ICS with {len(events)} events...")
+
     ics = build_ics(events)
 
     os.makedirs("output", exist_ok=True)
-    with open("output/abdel.ics", "w", encoding="utf-8") as f:
+
+    output_file = "output/abdel_2026_2027.ics"
+
+    with open(
+        output_file,
+        "w",
+        encoding="utf-8"
+    ) as f:
         f.write(ics)
-    print("Done! output/abdel.ics generated.")
+
+    print(f"Done! {output_file} generated.")
 
 
 if __name__ == "__main__":
