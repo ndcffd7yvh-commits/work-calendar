@@ -203,7 +203,7 @@ def main():
 
     os.makedirs("output", exist_ok=True)
 
-    output_file = "output/abdel_2026_2027.ics"
+    output_file = "output/abdel.ics"
 
     with open(
         output_file,
